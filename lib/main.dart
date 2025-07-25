@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 
 void main() {
+  
   runApp(TodoApp());
 }
 
@@ -33,6 +35,8 @@ class Todo{
 }
 
 class TodoHomePage extends StatefulWidget {
+  const TodoHomePage({super.key});
+
   @override
   _TodoHomePageState createState() => _TodoHomePageState();
 }
@@ -173,17 +177,32 @@ String _getPriorityText(Priority priority) {
 Widget build(BuildContext context) {
 
   return Scaffold(
-    appBar: AppBar(
-      title: Text('ToDo'),
-      elevation: 0,
-      actions: [
-        IconButton(
-          icon: Icon(Icons.clear_all),
-          onPressed: completedTodosCount > 0 ? _clearCompleted : null,
-          tooltip: 'Clear Completed',
-        )
-      ],
+     appBar: AppBar(
+  elevation: 4,
+  flexibleSpace: Container(
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: [Colors.deepPurpleAccent, Colors.pinkAccent],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      )
+      )
+      
+  ),
+  title: Text(
+    'My Tasks',
+  style: GoogleFonts.poppins(
+    fontSize: 22,
+  ),
+  ),
+  actions: [
+    IconButton(
+      icon: Icon(Icons.clear_all),
+      onPressed: completedTodosCount > 0 ? _clearCompleted : null,
+      tooltip: 'Clear Completed',
     ),
+  ],
+),
     body: Column(
       children: [
         Container(
@@ -191,11 +210,13 @@ Widget build(BuildContext context) {
           child: TextField(
             controller: _searchController,
             decoration: InputDecoration(
+              filled: true,
+              fillColor: Colors.white10,
               hintText: 'Search Todos...',
-              prefixIcon: Icon(Icons.search),
+              prefixIcon: Icon(Icons.search, color: Colors.white70),
               suffixIcon: searchQuery.isNotEmpty
                 ?IconButton(
-                icon: Icon(Icons.clear),
+                icon: Icon(Icons.clear, color: Colors.white70,),
                 onPressed: () {
                   _searchController.clear();
                   setState(() {
@@ -204,7 +225,8 @@ Widget build(BuildContext context) {
                 },
               )
               : null,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10.0)
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10.0),
+                borderSide: BorderSide.none,
               ),
             ),
             onChanged: (value) {
@@ -214,11 +236,18 @@ Widget build(BuildContext context) {
             },
           ),
         ),
-        Container(
+        SizedBox(
           height: 50,
           child: Row(
             children: [
-              Expanded(child: TabBar(controller: DefaultTabController.of(context),
+              Expanded(child: TabBar(
+                indicator: BoxDecoration(
+                  borderRadius: BorderRadius.circular(50),
+                   color: Colors.pinkAccent.withOpacity(0.3),
+                ),
+                controller: DefaultTabController.of(context),
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.grey,
                 tabs: [
                   Tab(text: 'All (${todos.length})'),
                   Tab(text: 'Active ($activeTodosCount)'),
@@ -288,9 +317,21 @@ Widget build(BuildContext context) {
                         );
                     },
                     child: Card(
-                      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Container(
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: [
+          Colors.deepPurpleAccent.withOpacity(0.2),
+          Colors.pinkAccent.withOpacity(0.2),
+        ],
+      ),
+      borderRadius: BorderRadius.circular(16),
+    ),
                       child: ListTile(
                         leading: Checkbox(
+                          shape: CircleBorder(),
                           value: todo.isCompleted,
                           onChanged: (bool? value){
                             _toggleTodo(todo.id);
@@ -369,7 +410,8 @@ Widget build(BuildContext context) {
                               },
                       ),
                     ),
-                  );
+                    ),
+                  ); 
                 },
               ),
         ),
@@ -379,8 +421,12 @@ Widget build(BuildContext context) {
       onPressed: (){
         _showAddDialog();
       },
-      child: Icon(Icons.add),
       tooltip: 'Add Todo',
+      backgroundColor: Colors.pinkAccent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Icon(Icons.add, size: 28),
+      elevation: 10,
+      splashColor: Colors.deepPurpleAccent,
     ),
   );
 }
@@ -410,38 +456,49 @@ void _showTodoDetails(Todo todo){
 
     context: context,
     builder: (context) => AlertDialog(
-      title: Text(todo.title),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if(todo.description.isNotEmpty) ...[
-            Text('Descrption:', style: TextStyle(fontWeight: FontWeight.bold)),
-            Text(todo.description),
-            SizedBox(height: 16),
-          ],
-          Text('Priority:',style: TextStyle(fontWeight: FontWeight.bold)),
-          Text(_getPriorityText(todo.priority)),
-          SizedBox(height: 8),
-          Text('Category:', style: TextStyle(fontWeight: FontWeight.bold)),
-          Text(todo.category),
-          SizedBox(height: 8),
-          Text('Created At:', style: TextStyle(fontWeight: FontWeight.bold)),
-          Text('${todo.createdAt.day}/${todo.createdAt.month}/${todo.createdAt.year}'),
-          if(todo.dueDate != null) ...[
-            SizedBox(height: 8),
-            Text('Due Date:', style: TextStyle(fontWeight: FontWeight.bold)),
-            Text('${todo.dueDate!.day}/${todo.dueDate!.month}/${todo.dueDate!.year}'),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text('Close'),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: Color(0xFF2C2C54),
+  title: Row(
+    children: [
+      Icon(Icons.task, color: Colors.pinkAccent),
+      SizedBox(width: 8),
+      Text(todo.title),
+    ],
+  ),
+  content: Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (todo.description.isNotEmpty)
+        ListTile(
+          leading: Icon(Icons.description),
+          title: Text(todo.description),
         ),
-      ],
+      ListTile(
+        leading: Icon(Icons.priority_high),
+        title: Text(_getPriorityText(todo.priority)),
+      ),
+      ListTile(
+        leading: Icon(Icons.category),
+        title: Text(todo.category),
+      ),
+      ListTile(
+        leading: Icon(Icons.date_range),
+        title: Text('${todo.createdAt.day}/${todo.createdAt.month}/${todo.createdAt.year}'),
+      ),
+      if (todo.dueDate != null)
+        ListTile(
+          leading: Icon(Icons.schedule),
+          title: Text('${todo.dueDate!.day}/${todo.dueDate!.month}/${todo.dueDate!.year}'),
+        ),
+    ],
+  ),
+  actions: [
+    TextButton(
+      onPressed: () => Navigator.pop(context),
+      child: Text('Close'),
     ),
+  ],
+)
   );
 }
 
@@ -451,7 +508,7 @@ class AddEditTodoDialog extends StatefulWidget{
   final Todo? todo;
   final Function(Todo) onSave;
 
-  AddEditTodoDialog({this.todo, required this.onSave});
+  const AddEditTodoDialog({super.key, this.todo, required this.onSave});
 
   @override
 
@@ -466,6 +523,8 @@ class _AddEditTodoDialogState extends State<AddEditTodoDialog>{
   late Priority _priority;
   late String _category;
   DateTime? _dueDate;
+
+
 
   final List<String> _categories = [
     'General',
@@ -633,18 +692,30 @@ String _getPriorityText(Priority priority) {
 
 // Wrap the TodoHomePage with DefaultTabController
 class TodoApp extends StatelessWidget {
+  const TodoApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Advanced Todo App',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-      ),
-      home: DefaultTabController(
-        length: 3,
-        child: TodoHomePage(),
-      ),
+      themeMode: ThemeMode.dark,
+       darkTheme: ThemeData.dark().copyWith(
+    scaffoldBackgroundColor: Color(0xFF121212),
+    cardColor: Colors.grey[900],
+    textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+    primaryColor: Colors.deepPurpleAccent,
+    appBarTheme: AppBarTheme(
+    backgroundColor: Color(0xFF1F1F1F),
+    elevation: 0,
+  ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: Colors.pinkAccent,
+    ),
+  ),
+  home: DefaultTabController(
+    length: 3,
+    child: TodoHomePage(),
+  ),
     );
   }
 }
