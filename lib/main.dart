@@ -1,19 +1,78 @@
+import 'dart:math';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
+import 'package:googleapis/calendar/v3.dart' as calendar;
+import 'package:googleapis_auth/auth_io.dart' as auth;
 
-void main() {
-  
-  runApp(TodoApp());
+
+final user = googleSignIn.signInSilently();
+
+final GoogleSignIn googleSignIn = GoogleSignIn(
+  scopes: [
+    'email',
+    'https://www.googleapis.com/auth/calendar',
+  ],
+);
+
+Future<GoogleSignInAccount?> signInWithGoogle() async {
+   try {
+    final account = await googleSignIn.signIn();
+    if (account != null) {
+      debugPrint("User signed in: ${account.displayName}");
+    }
+    return account;
+  } catch (error) {
+    debugPrint("Google Sign-In error: $error");
+    return null;
+  }
 }
 
+final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
+
+void main() {
+  runApp(
+    
+    ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeNotifier,
+      builder: (context, currentTheme, _){
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          themeMode: currentTheme,
+          theme: ThemeData(
+            brightness: Brightness.light,
+            primarySwatch: Colors.pink,
+            scaffoldBackgroundColor: Colors.white,
+            textTheme: GoogleFonts.poppinsTextTheme(ThemeData.light().textTheme),
+          ),
+          darkTheme: ThemeData(
+             brightness: Brightness.dark,
+            scaffoldBackgroundColor: const Color(0xFF121212),
+            primarySwatch: Colors.pink,
+            textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+          ),
+          home: DefaultTabController(
+            length: 3,
+            child: TodoHomePage(),
+          ),
+        );
+      }
+    )    
+    );
+}
 
 enum Priority { low, medium, high }
 enum TodoFilter { all, active, completed }
 
+
 class Todo{
 
   String id;
+  IconData icon;
+  int total;
+  int completed;
   String title;
   String description;
   DateTime createdAt;
@@ -23,6 +82,9 @@ class Todo{
   bool isCompleted;
 
   Todo({
+    required this.icon,
+    required this.total,
+    required this.completed,
     required this.id,
     required this.title,
     this.description = '',
@@ -32,7 +94,21 @@ class Todo{
     this.category = 'General',
     this.priority = Priority.low,
   });
+      
+    double get progress => total > 0 ? completed / total : 0.0;
+
 }
+
+Map<String, IconData> categoryIcons = {
+  'General': Icons.category,
+  'Work': Icons.work,
+  'Personal': Icons.person,
+  'Health': Icons.health_and_safety,
+  'Shopping': Icons.shopping_cart,
+  'Finance': Icons.account_balance_wallet,
+  'Travel': Icons.travel_explore,
+  'Education': Icons.school,
+};
 
 class TodoHomePage extends StatefulWidget {
   const TodoHomePage({super.key});
@@ -43,6 +119,7 @@ class TodoHomePage extends StatefulWidget {
 
 class _TodoHomePageState extends State<TodoHomePage> {
 
+  String? selectedCategory;
   List<Todo> todos = [];
   TodoFilter currentFilter = TodoFilter.all;
   String searchQuery = '';
@@ -57,6 +134,9 @@ class _TodoHomePageState extends State<TodoHomePage> {
   void _loopsampleData() {
     todos = List.generate(10, (index) {
       return Todo(
+        icon: categoryIcons['travel'] ?? Icons.category,
+        total: index % 5 + 1,
+        completed: index % 3, // Randomly set completed count for demo
         id: 'todo_$index',
         title: 'Todo Item $index',
         description: 'Description for Todo Item $index',
@@ -67,27 +147,45 @@ class _TodoHomePageState extends State<TodoHomePage> {
     });
   }
 
+Map<String, List<Todo>> get categoryMap{
+  Map<String, List<Todo>> map ={};
+
+  for(var todo in todos){
+    map.putIfAbsent(todo.category,() => []).add(todo);
+  }
+  return map;
+}
+
 List<Todo> get filteredTodos{
-  List<Todo> filtered = todos;
+
+
+  //List<Todo> filtered = todos;
+List<Todo> filteredTodos = todos.where((todo) {
+  final matchesFilter = currentFilter == TodoFilter.all
+      || (currentFilter == TodoFilter.active && !todo.isCompleted)
+      || (currentFilter == TodoFilter.completed && todo.isCompleted);
+  final matchesCategory = selectedCategory == null || todo.category == selectedCategory;
+  return matchesFilter && matchesCategory;
+}).toList();
 
   if (searchQuery.isNotEmpty) {
-    filtered = filtered.where((todo) => 
+    filteredTodos = filteredTodos.where((todo) => 
     todo.title.toLowerCase().contains(searchQuery.toLowerCase())||
     todo.description.toLowerCase().contains(searchQuery.toLowerCase())).toList();
   }
 
   switch (currentFilter){
     case TodoFilter.active:
-      filtered = filtered.where((todo) => !todo.isCompleted).toList();
+      filteredTodos = filteredTodos.where((todo) => !todo.isCompleted).toList();
       break;
     case TodoFilter.completed:
-      filtered = filtered.where((todo) => todo.isCompleted).toList();
+      filteredTodos = filteredTodos.where((todo) => todo.isCompleted).toList();
       break;
     case TodoFilter.all:
       break;
   }
 
-  filtered.sort((a, b) {
+  filteredTodos.sort((a, b) {
     if (a.isCompleted != b.isCompleted) {
       return a.isCompleted ? 1 : -1; // Completed todos go to the end
     } 
@@ -101,12 +199,86 @@ List<Todo> get filteredTodos{
     return b.createdAt.compareTo(a.createdAt); // Newer todos first
   });
 
-  return filtered;
+  return filteredTodos;
 
 }
 
 int get activeTodosCount => todos.where((todo)=> !todo.isCompleted).length;
 int get completedTodosCount => todos.where((todo) => todo.isCompleted).length;
+
+Widget buildCategoryScroll(){
+  final categoryData = categoryMap;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+
+
+  return SizedBox(
+    height: 120,
+    child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        itemCount: categoryData.keys.length,
+        separatorBuilder: (_,_) => SizedBox(width: 12),
+        itemBuilder: (context, index){
+          final category = categoryData.keys.elementAt(index);
+          final todosInCategory = categoryData[category]!;
+          final total = todosInCategory.length;
+          final completed = todosInCategory.where((t) => t.isCompleted).length;
+          final progress = total == 0 ? 0.0 : completed / total;
+
+          return GestureDetector(
+
+            onTap: (){
+              setState(() {
+                currentFilter = TodoFilter.all;
+                selectedCategory = category;
+              });
+            },
+            child: Container(
+              width: 150,
+              padding: EdgeInsets.all(12.0),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: isDark? Colors.pink.withOpacity(0.1): Colors.white,
+                border: Border.all(color: isDark ? Colors.pinkAccent: Colors.black.withOpacity(0.2)),
+
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    category,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: isDark?Colors.white: Colors.black,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: isDark? Colors.white30: Colors.grey[300],
+                    color: Colors.pinkAccent,
+                    minHeight: 6,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    '$completed/$total Completed',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.white70: Colors.black54,
+                    ),
+                  )
+                ],
+              ),
+            )
+
+          );
+
+        },
+      )
+  );
+}
 
 
 void _addTodo(Todo todo) {
@@ -173,8 +345,10 @@ String _getPriorityText(Priority priority) {
   }
 }
 
+
 @override
 Widget build(BuildContext context) {
+final isDark = Theme.of(context).brightness == Brightness.dark;
 
   return Scaffold(
      appBar: AppBar(
@@ -188,7 +362,7 @@ Widget build(BuildContext context) {
       )
       )
       
-  ),
+  ),  
   title: Text(
     'My Tasks',
   style: GoogleFonts.poppins(
@@ -202,6 +376,93 @@ Widget build(BuildContext context) {
       tooltip: 'Clear Completed',
     ),
   ],
+  leading: Builder(
+    builder: (context){
+      return IconButton(
+        icon: CircleAvatar(
+          backgroundImage: NetworkImage('https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png'),
+        ),
+        onPressed: () {
+          Scaffold.of(context).openDrawer();
+        },
+        tooltip: 'Menu',
+      );
+    }
+),
+),  
+drawer: FutureBuilder<GoogleSignInAccount?>(
+  future: signInWithGoogle(),
+  builder: (context, snapshot) {
+    final user = snapshot.data;
+    return Drawer(
+      backgroundColor: isDark ? Color(0xFF121212) : Colors.white,
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(
+              color: Colors.deepPurpleAccent,
+            ),
+            child: Text(
+              'Welcome ${user?.displayName ?? 'User'}',
+              style: GoogleFonts.poppins(
+                fontSize: 24,
+                color: isDark ? Colors.white : Colors.black,
+              ),
+            ),
+          ),
+          ListTile(
+            leading: Icon(Icons.login, color: isDark ? Colors.white : Colors.black),
+            title: Text('Login', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+            onTap: () async {
+              final user = await signInWithGoogle();
+              if (user != null) {                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Logged in as ${user.displayName}'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Login failed'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.sync, color: isDark ? Colors.white : Colors.black),
+            title: Text('Sync', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+            onTap: () {
+              // Handle home tap
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.dark_mode_outlined, color: isDark ? Colors.white : Colors.black),
+            title: Text('Theme', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+            onTap: () {
+              // Handle settings tap
+              themeNotifier.value =
+                  themeNotifier.value == ThemeMode.dark
+                      ? ThemeMode.light
+                      : ThemeMode.dark;
+              Navigator.pop(context);
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.info, color: isDark ? Colors.white : Colors.black),
+            title: Text('About', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+            onTap: () {
+              // Handle about tap
+            },
+          ),
+        ],
+      ),
+    );
+  },
 ),
     body: Column(
       children: [
@@ -210,10 +471,14 @@ Widget build(BuildContext context) {
           child: TextField(
             controller: _searchController,
             decoration: InputDecoration(
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: isDark ?Colors.white70: Colors.black54),
+                borderRadius: BorderRadius.circular(10.0),
+              ),
               filled: true,
               fillColor: Colors.white10,
               hintText: 'Search Todos...',
-              prefixIcon: Icon(Icons.search, color: Colors.white70),
+              prefixIcon: Icon(Icons.search, color: isDark ? Colors.white70: Colors.black54),
               suffixIcon: searchQuery.isNotEmpty
                 ?IconButton(
                 icon: Icon(Icons.clear, color: Colors.white70,),
@@ -226,7 +491,7 @@ Widget build(BuildContext context) {
               )
               : null,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10.0),
-                borderSide: BorderSide.none,
+              borderSide: BorderSide.none,                
               ),
             ),
             onChanged: (value) {
@@ -235,6 +500,14 @@ Widget build(BuildContext context) {
               });
             },
           ),
+          
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+              buildCategoryScroll(),
+              SizedBox(height: 12),
+  ],
         ),
         SizedBox(
           height: 50,
@@ -424,12 +697,14 @@ Widget build(BuildContext context) {
       tooltip: 'Add Todo',
       backgroundColor: Colors.pinkAccent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Icon(Icons.add, size: 28),
       elevation: 10,
       splashColor: Colors.deepPurpleAccent,
+      child: Icon(Icons.add, size: 28),
     ),
   );
 }
+
+
 
 void _showAddDialog() {
   showDialog(
@@ -474,11 +749,11 @@ void _showTodoDetails(Todo todo){
           title: Text(todo.description),
         ),
       ListTile(
-        leading: Icon(Icons.priority_high),
+        leading: Icon(Icons.priority_high, color: _getPriorityColor(todo.priority)),
         title: Text(_getPriorityText(todo.priority)),
       ),
       ListTile(
-        leading: Icon(Icons.category),
+        leading: Icon(categoryIcons[todo.category] ?? Icons.category),
         title: Text(todo.category),
       ),
       ListTile(
@@ -659,6 +934,9 @@ class _AddEditTodoDialogState extends State<AddEditTodoDialog>{
           onPressed: (){
             if(_titleController.text.isNotEmpty){
               final todo = Todo(
+                icon: widget.todo?.icon ?? Icons.check_circle_outline,
+                total: widget.todo?.total ?? 1,
+                completed: widget.todo?.completed ?? 0,
                 id: widget.todo?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
                 title: _titleController.text,
                 description: _descriptionController.text,
@@ -677,6 +955,7 @@ class _AddEditTodoDialogState extends State<AddEditTodoDialog>{
       ],
     );
   }
+  
 
 String _getPriorityText(Priority priority) {
     switch (priority) {
