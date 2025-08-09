@@ -452,13 +452,6 @@ drawer: FutureBuilder<GoogleSignInAccount?>(
               Navigator.pop(context);
             },
           ),
-          ListTile(
-            leading: Icon(Icons.info, color: isDark ? Colors.white : Colors.black),
-            title: Text('About', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
-            onTap: () {
-              // Handle about tap
-            },
-          ),
         ],
       ),
     );
