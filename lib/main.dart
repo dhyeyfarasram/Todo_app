@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import 'package:googleapis/calendar/v3.dart' as calendar;
+import 'package:googleapis/servicemanagement/v1.dart';
 import 'package:googleapis_auth/auth_io.dart' as auth;
+import 'package:http/http.dart' as http;
 
 
 final user = googleSignIn.signInSilently();
@@ -16,6 +18,70 @@ final GoogleSignIn googleSignIn = GoogleSignIn(
     'https://www.googleapis.com/auth/calendar',
   ],
 );
+
+class GoogleAuthClient extends http.BaseClient {
+
+  final Map<String, String> _headers;
+  final http.Client _client = http.Client();
+
+  GoogleAuthClient(this._headers);
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    request.headers.addAll(_headers);
+    return _client.send(request);
+  }
+}
+
+Future<calendar.CalendarApi?> getCalendarApi() async{
+
+  final account = await googleSignIn.signInSilently() ?? await googleSignIn.signIn();
+  if (account == null){
+    return null;
+  }
+
+  final authHeaders = await account.authHeaders;
+  final client = GoogleAuthClient(authHeaders);
+
+  return calendar.CalendarApi(client);
+}
+
+Future<void> SyncTodosToCalendar(List<Todo> todos) async {
+
+  final account = await googleSignIn.signInSilently() ?? await googleSignIn.signIn();
+  if (account == null) { return null; }
+
+
+
+  final authHeaders = await account.authHeaders;
+  final client = GoogleAuthClient(authHeaders);
+  final calendarApi = calendar.CalendarApi(client);
+
+  for (var todo in todos){
+    if(todo.dueDate != null){
+      var event = calendar.Event(
+        summary: todo.title,
+        description: todo.description,
+        start: calendar.EventDateTime(
+          dateTime: todo.dueDate,
+          timeZone: 'UTC',
+        ),
+        end: calendar.EventDateTime(
+          dateTime: todo.dueDate!.add(Duration(hours: 1)), // Default to 1 hour duration
+          timeZone: 'UTC',
+        )
+      );
+
+      try{
+        await calendarApi.events.insert(event, "primary");
+        debugPrint("Todo '${todo.title}' synced to Google Calendar");
+      }
+      catch (e) {
+        debugPrint("Failed to sync todo '${todo.title}' to Google Calendar: $e");
+      }
+    }
+  } 
+}
 
 Future<GoogleSignInAccount?> signInWithGoogle() async {
    try {
@@ -29,6 +95,8 @@ Future<GoogleSignInAccount?> signInWithGoogle() async {
     return null;
   }
 }
+
+
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
 
@@ -436,7 +504,14 @@ drawer: FutureBuilder<GoogleSignInAccount?>(
           ListTile(
             leading: Icon(Icons.sync, color: isDark ? Colors.white : Colors.black),
             title: Text('Sync', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
-            onTap: () {
+            onTap: () async{
+              await SyncTodosToCalendar(todos);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Todos synced to Google Calendar'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
               // Handle home tap
             },
           ),
